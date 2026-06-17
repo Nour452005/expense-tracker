@@ -283,6 +283,9 @@
     async function submitExpense() {
       const id          = document.getElementById('edit-id').value;
       const amount      = document.getElementById('amount').value;
+      if (parseFloat(amount) <= 0) {
+  return showFormAlert('Amount must be greater than zero.', 'error');
+}
       const category    = document.getElementById('category').value;
       const description = document.getElementById('description').value;
       const date        = document.getElementById('date').value;

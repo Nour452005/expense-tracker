@@ -21,6 +21,10 @@ const addExpense = async (req, res) => {
     return res.status(400).json({ error: 'Amount and category are required.' });
   }
 
+  if (isNaN(amount) || parseFloat(amount) <= 0) {
+    return res.status(400).json({ error: 'Amount must be a positive number.' });
+  }
+
   try {
     const result = await pool.query(
       `INSERT INTO expenses (user_id, amount, category, description, date)
