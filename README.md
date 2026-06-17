@@ -1,4 +1,4 @@
-# Trackr — Expense Tracker
+# Tracker — Expense Tracker
 
 A full-stack expense tracking web application with JWT authentication, built as internship preparation.
 
