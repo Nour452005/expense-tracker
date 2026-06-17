@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trackr — Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="dashboard">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">💸</div>
+      <span>Tracker</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active">
+        <span>📊</span> Overview
+      </button>
+      <button class="nav-item" onclick="document.querySelector('.expense-list').scrollIntoView({ behavior: 'smooth' })">
+  <span>📋</span> Expenses
+</button>
+    </nav>
+
+    <div class="sidebar-user">
+      <div class="user-avatar" id="user-avatar">N</div>
+      <div class="user-info">
+        <div class="user-name" id="user-name">Loading...</div>
+        <div class="user-role">Personal Account</div>
+      </div>
+      <button class="btn-logout" onclick="logout()" title="Sign out">↪</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Header -->
+    <div class="page-header">
+      <h1>Good to see you, <span id="greeting-name">there</span> 👋</h1>
+      <p>Here's your spending overview for this month.</p>
+    </div>
+
+    <!-- Hero Total -->
+    <div class="hero-total">
+      <div class="hero-label">Total Spent This Month</div>
+      <div class="hero-amount" id="hero-amount">$0.00</div>
+      <div class="hero-sub" id="hero-sub">Loading your expenses...</div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="cards-row">
+      <div class="card">
+        <div class="card-label">Biggest Category</div>
+        <div class="card-value" id="top-category">—</div>
+        <div class="card-sub" id="top-category-amount"></div>
+      </div>
+      <div class="card">
+        <div class="card-label">Total Expenses</div>
+        <div class="card-value" id="total-count">0</div>
+        <div class="card-sub">transactions recorded</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Categories Used</div>
+        <div class="card-value" id="cat-count">0</div>
+        <div class="card-sub">spending categories</div>
+      </div>
+    </div>
+
+    <!-- Chart + Form -->
+    <div class="content-grid">
+
+      <!-- Left: Chart + Expense List -->
+      <div>
+
+        <!-- Chart -->
+        <div class="chart-container">
+          <div class="section-header">
+            <div class="section-title">Spending by Category</div>
+          </div>
+          <canvas id="category-chart" height="200"></canvas>
+        </div>
+
+        <!-- Expense List -->
+        <div>
+          <div class="section-header">
+            <div class="section-title">Transactions</div>
+            <select class="filter-select" id="filter-category" onchange="filterExpenses()">
+              <option value="all">All Categories</option>
+              <option value="Food">Food</option>
+              <option value="Transport">Transport</option>
+              <option value="Shopping">Shopping</option>
+              <option value="Health">Health</option>
+              <option value="Bills">Bills</option>
+              <option value="Entertainment">Entertainment</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="expense-list" id="expense-list">
+            <div class="empty-state">
+              <div class="empty-icon">💳</div>
+              <p>No expenses yet. Add one to get started.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right: Add Expense Form -->
+      <div class="form-panel">
+        <div class="section-title" id="form-title">Add Expense</div>
+        <br/>
+
+        <div class="alert" id="form-alert"></div>
+
+        <input type="hidden" id="edit-id" />
+
+        <div class="form-group">
+          <label>Amount ($)</label>
+          <input type="number" id="amount" placeholder="0.00" step="0.01" min="0" />
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <select id="category">
+            <option value="Food">🍔 Food</option>
+            <option value="Transport">🚗 Transport</option>
+            <option value="Shopping">🛍️ Shopping</option>
+            <option value="Health">💊 Health</option>
+            <option value="Bills">🧾 Bills</option>
+            <option value="Entertainment">🎬 Entertainment</option>
+            <option value="Other">📦 Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <input type="text" id="description" placeholder="What was this for?" />
+        </div>
+        <div class="form-group">
+          <label>Date</label>
+          <input type="date" id="date" />
+        </div>
+
+        <button class="btn-primary" id="submit-btn" onclick="submitExpense()">Add Expense</button>
+        <br/><br/>
+        <button class="btn-edit" id="cancel-btn" style="display:none; width:100%;" onclick="cancelEdit()">Cancel Edit</button>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    // ── State ──────────────────────────────────
+    let token    = sessionStorage.getItem('token');
+    let user     = JSON.parse(sessionStorage.getItem('user') || '{}');
+    let expenses = [];
+    let chart    = null;
+
+    // ── Guard: redirect if not logged in ───────
+    if (!token) window.location.href = 'index.html';
+
+    // ── Auth header helper ─────────────────────
+    function authHeaders() {
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      };
+    }
+
+    // ── On page load ───────────────────────────
+    window.addEventListener('DOMContentLoaded', () => {
+      // Set today as default date
+      document.getElementById('date').valueAsDate = new Date();
+
+      // Fill user info
+      if (user.name) {
+        document.getElementById('user-name').textContent    = user.name;
+        document.getElementById('greeting-name').textContent = user.name.split(' ')[0];
+        document.getElementById('user-avatar').textContent  = user.name[0].toUpperCase();
+      }
+
+      loadData();
+    });
+
+    // ── Load everything ────────────────────────
+    async function loadData() {
+      await Promise.all([loadExpenses(), loadSummary()]);
+    }
+
+    // ── Fetch expenses ─────────────────────────
+    async function loadExpenses() {
+      try {
+        const res  = await fetch('/expenses', { headers: authHeaders() });
+        if (res.status === 401) return logout();
+        expenses   = await res.json();
+        renderExpenses(expenses);
+        updateCount();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // ── Fetch summary ──────────────────────────
+    async function loadSummary() {
+      try {
+        const res  = await fetch('/expenses/summary', { headers: authHeaders() });
+        const data = await res.json();
+
+        // Hero total
+        const total = parseFloat(data.this_month_total) || 0;
+        document.getElementById('hero-amount').textContent = formatMoney(total);
+        document.getElementById('hero-sub').textContent =
+          total === 0 ? 'No spending recorded this month yet.'
+                      : `Across ${data.by_category.length} categor${data.by_category.length === 1 ? 'y' : 'ies'} this month.`;
+
+        // Top category card
+        if (data.by_category.length > 0) {
+          const top = data.by_category[0];
+          document.getElementById('top-category').textContent        = top.category;
+          document.getElementById('top-category-amount').textContent = formatMoney(top.total);
+        } else {
+          document.getElementById('top-category').textContent        = '—';
+          document.getElementById('top-category-amount').textContent = '';
+        }
+
+        // Categories count
+        document.getElementById('cat-count').textContent = data.by_category.length;
+
+        // Chart
+        renderChart(data.by_category);
+
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // ── Render expense list ────────────────────
+    function renderExpenses(list) {
+      const container = document.getElementById('expense-list');
+
+      if (list.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">💳</div>
+            <p>No expenses here yet.</p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = list.map(e => `
+        <div class="expense-item">
+          <div class="expense-icon ${categoryClass(e.category)}">
+            ${categoryEmoji(e.category)}
+          </div>
+          <div class="expense-details">
+            <div class="expense-desc">${e.description || e.category}</div>
+            <div class="expense-meta">${e.category} · ${formatDate(e.date)}</div>
+          </div>
+          <div class="expense-amount">${formatMoney(e.amount)}</div>
+          <div class="expense-actions">
+            <button class="btn-edit"   onclick="startEdit(${e.id})">Edit</button>
+            <button class="btn-danger" onclick="deleteExpense(${e.id})">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ── Filter by category ─────────────────────
+    function filterExpenses() {
+      const cat      = document.getElementById('filter-category').value;
+      const filtered = cat === 'all' ? expenses : expenses.filter(e => e.category === cat);
+      renderExpenses(filtered);
+    }
+
+    // ── Update transaction count ───────────────
+    function updateCount() {
+      document.getElementById('total-count').textContent = expenses.length;
+    }
+
+    // ── Add or Update expense ──────────────────
+    async function submitExpense() {
+      const id          = document.getElementById('edit-id').value;
+      const amount      = document.getElementById('amount').value;
+      const category    = document.getElementById('category').value;
+      const description = document.getElementById('description').value;
+      const date        = document.getElementById('date').value;
+
+      if (!amount || !category) {
+        return showFormAlert('Amount and category are required.', 'error');
+      }
+
+      const isEdit = !!id;
+      const url    = isEdit ? `/expenses/${id}` : '/expenses';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: authHeaders(),
+          body: JSON.stringify({ amount, category, description, date })
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          return showFormAlert(data.error || 'Something went wrong.', 'error');
+        }
+
+        clearForm();
+        showFormAlert(isEdit ? 'Expense updated!' : 'Expense added!', 'success');
+        loadData();
+
+      } catch (err) {
+        showFormAlert('Could not reach the server.', 'error');
+      }
+    }
+
+    // ── Start editing an expense ───────────────
+    function startEdit(id) {
+      const e = expenses.find(x => x.id === id);
+      if (!e) return;
+
+      document.getElementById('edit-id').value        = e.id;
+      document.getElementById('amount').value         = e.amount;
+      document.getElementById('category').value       = e.category;
+      document.getElementById('description').value    = e.description || '';
+      document.getElementById('date').value           = e.date.split('T')[0];
+      document.getElementById('form-title').textContent  = 'Edit Expense';
+      document.getElementById('submit-btn').textContent  = 'Save Changes';
+      document.getElementById('cancel-btn').style.display = 'block';
+
+      // Scroll to form
+      document.querySelector('.form-panel').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // ── Cancel edit ────────────────────────────
+    function cancelEdit() {
+      clearForm();
+    }
+
+    // ── Clear form ─────────────────────────────
+    function clearForm() {
+      document.getElementById('edit-id').value            = '';
+      document.getElementById('amount').value             = '';
+      document.getElementById('description').value        = '';
+      document.getElementById('date').valueAsDate         = new Date();
+      document.getElementById('form-title').textContent   = 'Add Expense';
+      document.getElementById('submit-btn').textContent   = 'Add Expense';
+      document.getElementById('cancel-btn').style.display = 'none';
+    }
+
+    // ── Delete expense ─────────────────────────
+    async function deleteExpense(id) {
+      if (!confirm('Delete this expense?')) return;
+
+      try {
+        const res = await fetch(`/expenses/${id}`, {
+          method: 'DELETE',
+          headers: authHeaders()
+        });
+
+        if (res.ok) {
+          loadData();
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // ── Logout ─────────────────────────────────
+    function logout() {
+      sessionStorage.clear();
+      window.location.href = 'index.html';
+    }
+
+    // ── Chart ──────────────────────────────────
+    function renderChart(categories) {
+      const ctx = document.getElementById('category-chart').getContext('2d');
+
+      if (chart) chart.destroy();
+
+      if (categories.length === 0) {
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        return;
+      }
+
+      const colors = [
+        '#6C63FF','#A78BFA','#38BDF8','#22C55E',
+        '#FB923C','#F87171','#FACC15'
+      ];
+
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels:   categories.map(c => c.category),
+          datasets: [{
+            data:            categories.map(c => parseFloat(c.total)),
+            backgroundColor: colors.slice(0, categories.length),
+            borderRadius:    8,
+            borderSkipped:   false,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => ` $${ctx.parsed.y.toFixed(2)}`
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid:  { color: 'rgba(255,255,255,0.05)' },
+              ticks: { color: '#8884A8' }
+            },
+            y: {
+              grid:  { color: 'rgba(255,255,255,0.05)' },
+              ticks: {
+                color: '#8884A8',
+                callback: val => `$${val}`
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // ── Helpers ────────────────────────────────
+    function formatMoney(amount) {
+      return '$' + parseFloat(amount).toFixed(2);
+    }
+
+    function formatDate(dateStr) {
+      return new Date(dateStr).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric'
+      });
+    }
+
+    function categoryEmoji(cat) {
+      const map = {
+        Food: '🍔', Transport: '🚗', Shopping: '🛍️',
+        Health: '💊', Bills: '🧾', Entertainment: '🎬', Other: '📦'
+      };
+      return map[cat] || '📦';
+    }
+
+    function categoryClass(cat) {
+      const map = {
+        Food: 'cat-food', Transport: 'cat-transport', Shopping: 'cat-shopping',
+        Health: 'cat-health', Bills: 'cat-bills', Entertainment: 'cat-entertainment',
+        Other: 'cat-other'
+      };
+      return map[cat] || 'cat-other';
+    }
+
+    function showFormAlert(message, type) {
+      const el = document.getElementById('form-alert');
+      el.textContent  = message;
+      el.className    = `alert ${type} show`;
+      setTimeout(() => el.className = 'alert', 3000);
+    }
+  </script>
+
+</body>
+</html>

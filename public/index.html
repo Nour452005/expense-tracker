@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trackr — Sign In</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="auth-page">
+
+  <div class="auth-card">
+
+    <!-- Logo -->
+    <div class="auth-logo">
+      <div class="logo-icon">💸</div>
+      <span>Tracker</span>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('login')">Sign In</button>
+      <button class="tab-btn" onclick="switchTab('register')">Create Account</button>
+    </div>
+
+    <!-- Alert -->
+    <div class="alert" id="alert"></div>
+
+    <!-- Login Form -->
+    <div id="login-form">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="you@example.com" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="••••••••" />
+      </div>
+      <button class="btn-primary" onclick="login()">Sign In</button>
+    </div>
+
+    <!-- Register Form -->
+    <div id="register-form" style="display:none;">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" id="reg-name" placeholder="Nour Mrad" />
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="reg-email" placeholder="you@example.com" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="reg-password" placeholder="••••••••" />
+      </div>
+      <button class="btn-primary" onclick="register()">Create Account</button>
+    </div>
+
+  </div>
+
+  <script>
+    // ── Tab switching ──────────────────────────
+    function switchTab(tab) {
+      const isLogin = tab === 'login';
+
+      document.getElementById('login-form').style.display    = isLogin ? 'block' : 'none';
+      document.getElementById('register-form').style.display = isLogin ? 'none'  : 'block';
+
+      document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', isLogin ? i === 0 : i === 1);
+      });
+
+      hideAlert();
+    }
+
+    // ── Alert helpers ──────────────────────────
+    function showAlert(message, type) {
+      const el = document.getElementById('alert');
+      el.textContent = message;
+      el.className = `alert ${type} show`;
+    }
+
+    function hideAlert() {
+      document.getElementById('alert').className = 'alert';
+    }
+
+    // ── Login ──────────────────────────────────
+    async function login() {
+      const email    = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+
+      if (!email || !password) {
+        return showAlert('Please fill in all fields.', 'error');
+      }
+
+      try {
+        const res  = await fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          return showAlert(data.error || 'Login failed.', 'error');
+        }
+
+        // Store token and user in sessionStorage
+        // sessionStorage clears when the tab is closed — safer than localStorage
+        sessionStorage.setItem('token', data.token);
+        sessionStorage.setItem('user',  JSON.stringify(data.user));
+
+        window.location.href = 'dashboard.html';
+
+      } catch (err) {
+        showAlert('Could not reach the server.', 'error');
+      }
+    }
+
+    // ── Register ───────────────────────────────
+    async function register() {
+      const name     = document.getElementById('reg-name').value.trim();
+      const email    = document.getElementById('reg-email').value.trim();
+      const password = document.getElementById('reg-password').value;
+
+      if (!name || !email || !password) {
+        return showAlert('Please fill in all fields.', 'error');
+      }
+
+      try {
+        const res  = await fetch('/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, password })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          return showAlert(data.error || 'Registration failed.', 'error');
+        }
+
+        showAlert('Account created! Signing you in...', 'success');
+
+        // Auto-login after register
+        setTimeout(() => {
+          switchTab('login');
+          document.getElementById('login-email').value = email;
+        }, 1200);
+
+      } catch (err) {
+        showAlert('Could not reach the server.', 'error');
+      }
+    }
+
+    // ── Redirect if already logged in ─────────
+    if (sessionStorage.getItem('token')) {
+      window.location.href = 'dashboard.html';
+    }
+  </script>
+
+</body>
+</html>
